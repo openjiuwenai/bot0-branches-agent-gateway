@@ -17,7 +17,6 @@ from agent_gateway.channel_manager.im_platforms.feishu.feishu_connect import (
     FeishuChannel,
     FeishuConfig,
     _ApprovalCardContext,
-    _OTHER_OPTION_TEXT,
     _OTHER_PLACEHOLDER_TOKEN,
 )
 
@@ -339,7 +338,9 @@ def test_other_placeholder_click_guides_text_reply(channel):
         {"ref": {"request_id": "call_1", "index": 0}, "value": "Other"},
     ))
 
-    assert "自定义答案" in _toast_content(response)
+    # 评审意见 #202777531：占位文本引导与网页端引导两分支 toast 同含「自定义答案」
+    # 四字面，原断言无分支区分度（回归到 WEB 引导分支仍绿）；改断文本通路专属语。
+    assert "请直接回复本条消息的文本" in _toast_content(response)
     assert channel._card_contexts["call_1"].answers == {}
 
 
@@ -644,4 +645,6 @@ def test_all_placeholder_duplicate_value_still_guides_text_reply(channel):
         {"ref": {"request_id": "call_1", "index": 0}, "value": "x"},
     ))
 
-    assert "自定义答案" in _toast_content(response)
+    # 评审意见 #202777531：占位文本引导与网页端引导两分支 toast 同含「自定义答案」
+    # 四字面，原断言无分支区分度（回归到 WEB 引导分支仍绿）；改断文本通路专属语。
+    assert "请直接回复本条消息的文本" in _toast_content(response)

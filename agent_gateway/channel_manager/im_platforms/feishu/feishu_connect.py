@@ -3502,7 +3502,12 @@ class FeishuChannel(BaseChannel):
             }
             ctx = _ApprovalCardContext(
                 request_id=request_id,
-                source=source or _APPROVAL_SOURCE_ASK_USER,
+                # 评审意见 #202777531：source 口径单源——resume 侧
+                # `_build_resume_params` 为裸相等比较（上游形制），构造端统一
+                # strip 归一后，渲染谓词、resume 分支与投递回执三方口径一致，
+                # 杜绝「带空白 source 渲染成 ask_user 却按其他源 resume」。
+                source=str(source or _APPROVAL_SOURCE_ASK_USER).strip()
+                or _APPROVAL_SOURCE_ASK_USER,
                 questions=questions,
                 session_id=str(msg.session_id or ""),
                 interrupt_id=str(payload.get("interrupt_id") or ""),
