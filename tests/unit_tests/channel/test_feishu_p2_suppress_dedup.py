@@ -1512,8 +1512,28 @@ async def test_p2_short_reply_not_swallowed_by_suffix_fallback():
     ch._extract_receive_info = MagicMock(return_value=("oc_x", "chat_id"))
     ch._send_feishu_message = AsyncMock()
     ch._start_cardkit_session = AsyncMock(return_value=False)
-    ch._p2_final_fingerprints["req_t1"] = "上一轮助手完整回复的正文内容若干字，以好的收尾"
+    # 评审意见 #202777528：夹具尾缀修正——原形「…以好的收尾」并不以「好的」结尾，
+    # endswith 恒假、兜底分支根本没进，修复前后皆绿的恒真用例未锁定回归；
+    # 修正为真以「好的」结尾的指纹＋零计数断言锁死「未走兜底」。
+    ch._p2_final_fingerprints["req_t1"] = "上一轮助手完整回复的正文内容若干字，回复好的"
     m = _msg(event_name="chat.final", content="好的")
     m.payload["is_complete"] = True
     await ch.send(m)
     assert ch._send_feishu_message.await_count >= 1  # 修复前：短尾缀误抑制→零投递=红
+    assert ch._fingerprint_suppressed_total == 0     # 正向锁死未进兜底分支
+
+
+@pytest.mark.asyncio
+async def test_p2_long_suffix_fallback_still_suppresses_after_min_gate():
+    """评审意见 #202777528 镜像：最小长度门不得把尾缀兜底整面废掉——≥_ECHO_MIN_CHARS
+    的长尾缀重投仍须按已入账抑制（与短回复放行用例互为反向锁）。"""
+    ch = _make_channel()
+    ch._extract_receive_info = MagicMock(return_value=("oc_x", "chat_id"))
+    ch._send_feishu_message = AsyncMock()
+    ch._start_cardkit_session = AsyncMock(return_value=False)
+    ch._p2_final_fingerprints["req_t1"] = "上一轮助手完整回复的正文内容若干字，请查收附件报告"
+    m = _msg(event_name="chat.final", content="请查收附件报告")
+    m.payload["is_complete"] = True
+    await ch.send(m)
+    ch._send_feishu_message.assert_not_awaited()
+    assert ch._fingerprint_suppressed_total == 1
