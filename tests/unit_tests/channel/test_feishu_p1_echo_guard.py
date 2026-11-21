@@ -1,4 +1,5 @@
 """P1 echo guard tests (2026-11-06 judgement: user text echoed as bot reply)."""
+import asyncio
 import contextlib
 import json
 import logging
@@ -851,6 +852,34 @@ async def test_errored_stream_nonstream_status_no_completed():
         [c.args for c in ch._send_feishu_message.await_args_list], ensure_ascii=False)
     assert "已完成" not in sent
     assert "req_t1" not in ch._errored_stream_keys  # 标记被消费，无泄漏
+
+
+@pytest.mark.asyncio
+async def test_errored_status_early_return_clears_group_progress():
+    """评审意见 #202777527 回归：errored 终帧早退双形态（非流式冲刷面＋流式面
+    同形）必须完成群进度收尾——修复前裸 return 使已错轮的延迟提示任务仍挂起、
+    迟到触发向群内补发「处理中」，且 `_sent_group_progress_requests` 无界增长。"""
+    for streaming in (False, True):
+        ch = _make_channel()
+        ch.config.enable_streaming = streaming
+        ch._extract_receive_info = MagicMock(return_value=("oc_x", "chat_id"))
+        ch._send_feishu_message = AsyncMock()
+        ch._start_cardkit_session = AsyncMock(return_value=False)
+        ch._errored_stream_keys.add("req_t1")
+
+        async def _delayed_hint():
+            await asyncio.sleep(30)
+
+        ch._pending_group_progress_tasks["req_t1"] = (
+            asyncio.get_running_loop().create_task(_delayed_hint()))
+        ch._sent_group_progress_requests.add("req_t1")
+        st = _msg(event_name="chat.processing_status", content="")
+        st.payload["is_processing"] = False
+        await ch.send(st)
+        assert "req_t1" not in ch._pending_group_progress_tasks, f"streaming={streaming}"
+        assert "req_t1" not in ch._sent_group_progress_requests, f"streaming={streaming}"
+        assert "req_t1" not in ch._errored_stream_keys
+        ch._send_feishu_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio

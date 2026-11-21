@@ -2646,10 +2646,21 @@ class FeishuChannel(BaseChannel):
                             # 此前 errored 仅流式分支查，抑制帧收尾撤销标记后
                             # 错误态泄漏、终态 status 帧补出完成行。
                             if errored:
+                                # 评审意见 #202777527：errored 早退不得旁路群进度清理——
+                                # 修复前此形返回后跳过了 _handle_processing_status_event
+                                # 内的同清理（延迟提示任务迟到触发＋已发送标记无界增长）。
+                                req = str(getattr(msg, "id", "") or "").strip()
+                                if req and msg.event_type != EventType.HEALTH_CHECK_RELAY:
+                                    self._clear_group_progress_state(req)
                                 return
                             await self._handle_processing_status_event(msg, meta, payload)
                             return
                         if errored:
+                            # 评审意见 #202777527：流式面同形早退（上游既有）一并补
+                            # 群进度清理，与非流式面同契约。
+                            req = str(getattr(msg, "id", "") or "").strip()
+                            if req and msg.event_type != EventType.HEALTH_CHECK_RELAY:
+                                self._clear_group_progress_state(req)
                             return
                         content_str = self._extract_message_content(msg)
                         if not content_str.strip():
